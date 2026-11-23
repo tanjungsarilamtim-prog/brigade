@@ -25,6 +25,9 @@ nav button{flex:1;border:0;background:none;padding:12px 4px;font:inherit;font-si
 .ph{display:flex;gap:8px;overflow-x:auto;margin-top:8px}.ph img{height:70px;border-radius:8px}
 #toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:99;max-width:90%}#toast.on{display:block}
 .login{max-width:360px;margin:12vh auto;padding:0 18px}.login h1{font-size:22px;margin:0 0 4px}
+.gps-box{margin-top:10px;padding:10px 12px;background:var(--g2);border-radius:10px;font-size:13px;color:var(--tx)}
+.gps-box .coord{font-family:monospace;font-size:14px;font-weight:700;color:var(--g);margin-top:2px}
+.gps-box a{color:var(--g);font-weight:600;text-decoration:underline;display:inline-block;margin-top:4px}
 </style></head><body>
 <div id="app"></div><div id="toast"></div>
 <script>
@@ -37,8 +40,8 @@ const $=s=>document.querySelector(s),today=()=>new Date().toISOString().slice(0,
 const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const LS=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},SS=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 const uuid=()=>([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
-let CA={al:[],lh:[],jd:[],lp:[],nm:''},tab='baru',FS=[],GEO=null,PRE={},UID=null,syncing=false;
-const toast=m=>{const t=$('#toast');t.textContent=m;t.className='on';setTimeout(()=>t.className='',3200)};
+let CA={al:[],lh:[],jd:[],lp:[],nm:''},tab='baru',FS=[],GEO=null,GEO_ACC=null,PRE={},UID=null,syncing=false;
+const toast=m=>{const t=$('#toast');t.textContent=m;t.className='on';setTimeout(()=>t.className='',3500)};
 const nama=(a,id,f)=>{const r=a.find(x=>x.id==id);return r?r[f]:'-'};
 
 // ---------- Antrean offline (IndexedDB) ----------
@@ -97,21 +100,81 @@ function vBaru(){const P=PRE;
  <label>Kondisi alat</label><select id="t_kd"><option>Baik</option><option>Perlu Servis Ringan</option><option>Rusak</option></select>
  <label>Catatan</label><textarea id="t_ct" placeholder="Kendala, kejadian, dll."></textarea>
  <label>Foto kerja / kondisi alat</label><input type="file" accept="image/*" multiple onchange="pick(this.files)"><div class="ph" id="t_ph"></div>
- <div class="row"><button class="b" onclick="gps()" id="t_gps">📍 Ambil lokasi</button></div>
- <button class="b p" onclick="kirim()">Simpan & Kirim Laporan</button></div>`;fotoView()}
+ <div class="row">
+  <button type="button" class="b" onclick="gps()" id="t_gps">📍 Ambil lokasi</button>
+  <button type="button" class="b" onclick="gpsManual()" id="t_gps_man">✏️ Input manual</button>
+ </div>
+ <div id="t_gps_info"></div>
+ <button type="button" class="b p" onclick="kirim()">Simpan & Kirim Laporan</button></div>`;fotoView();renderGpsInfo()}
 async function pick(fs){for(const f of fs)FS.push(await comp(f));fotoView()}
 function fotoView(){const e=$('#t_ph');if(e)e.innerHTML=FS.map(b=>`<img src="${URL.createObjectURL(b)}">`).join('')}
-function gps(){const ok=()=>$('#t_gps').textContent='📍 Lokasi tersimpan ✓',
- man=()=>{const t=prompt('Tempel koordinat dari Google Maps (tekan lama di peta lalu salin angkanya). Contoh: -5.1234, 105.4567');if(!t)return;const m=t.match(/(-?\d+\.\d+)\s*[, ]\s*(-?\d+\.\d+)/);if(!m)return toast('Format koordinat tidak dikenali');GEO=[+m[1],+m[2]];ok()};
- if(!window.isSecureContext||!navigator.geolocation){toast('Lokasi otomatis butuh aplikasi di alamat https. Isi koordinat manual dulu.');return man()}
- navigator.geolocation.getCurrentPosition(p=>{GEO=[p.coords.latitude,p.coords.longitude];ok()},e=>{toast(e.code==1?'Izin lokasi ditolak untuk situs ini.':'Lokasi belum didapat, coba di tempat terbuka.');if(confirm('Isi koordinat manual?'))man()},{enableHighAccuracy:true,timeout:15000})}
+
+function renderGpsInfo(){
+ const btn=$('#t_gps'),box=$('#t_gps_info');
+ if(!btn||!box)return;
+ if(GEO&&GEO.length===2){
+  const lat=Number(GEO[0]).toFixed(6),lng=Number(GEO[1]).toFixed(6);
+  btn.textContent='📍 Perbarui lokasi ✓';
+  box.innerHTML=`<div class="gps-box"><div>Titik koordinat tersimpan${GEO_ACC?` (akurasi ±${Math.round(GEO_ACC)} m)`:''}:</div><div class="coord">${lat}, ${lng}</div><a href="https://maps.google.com/?q=${lat},${lng}" target="_blank" rel="noopener">Lihat titik di Google Maps ↗</a></div>`;
+ }else{
+  btn.textContent='📍 Ambil lokasi';
+  box.innerHTML='';
+ }
+}
+
+function gpsManual(){
+ const t=prompt('Tempel koordinat dari Google Maps (tekan lama di peta lalu salin angkanya).\nContoh: -5.123456, 105.456789',GEO?`${GEO[0]}, ${GEO[1]}`:'');
+ if(!t)return;
+ const m=t.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+ if(!m)return toast('Format koordinat tidak dikenali. Contoh: -5.1234, 105.4567');
+ const lat=+m[1],lng=+m[2];
+ if(lat<-90||lat>90||lng<-180||lng>180)return toast('Angka koordinat di luar batas wajar');
+ GEO=[lat,lng];GEO_ACC=null;renderGpsInfo();toast('Koordinat manual berhasil disimpan');
+}
+
+function gps(){
+ const btn=$('#t_gps');
+ if(!window.isSecureContext||!navigator.geolocation){
+  toast('Browser tidak mendukung GPS otomatis. Gunakan Input manual.');
+  return gpsManual();
+ }
+ if(btn){btn.disabled=true;btn.textContent='⏳ Mencari sinyal GPS...';}
+ const selesai=(lat,lng,acc)=>{
+  GEO=[lat,lng];GEO_ACC=acc||null;
+  if(btn)btn.disabled=false;
+  renderGpsInfo();
+  toast('Koordinat GPS berhasil didapat');
+ };
+ const gagal=(err)=>{
+  if(btn){btn.disabled=false;renderGpsInfo();}
+  let msg='Gagal mengambil lokasi GPS.';
+  if(err&&err.code===1)msg='Izin lokasi ditolak. Aktifkan izin Lokasi di pengaturan browser/HP.';
+  else if(err&&err.code===2)msg='Sinyal GPS tidak tersedia. Pastikan GPS HP aktif.';
+  else if(err&&err.code===3)msg='Waktu habis mencari sinyal GPS. Coba di tempat terbuka atau pakai Input manual.';
+  toast(msg);
+ };
+ navigator.geolocation.getCurrentPosition(
+  p=>selesai(p.coords.latitude,p.coords.longitude,p.coords.accuracy),
+  e=>{
+   if(e&&e.code===1)return gagal(e);
+   // Fallback akurasi standar jika GPS satelit presisi tinggi timeout/gagal
+   navigator.geolocation.getCurrentPosition(
+    p2=>selesai(p2.coords.latitude,p2.coords.longitude,p2.coords.accuracy),
+    e2=>gagal(e2),
+    {enableHighAccuracy:false,timeout:12000,maximumAge:60000}
+   );
+  },
+  {enableHighAccuracy:true,timeout:15000,maximumAge:0}
+ );
+}
+
 const jam=(a,b)=>{if(!a||!b)return null;let m=(+b.slice(0,2)*60+ +b.slice(3,5))-(+a.slice(0,2)*60+ +a.slice(3,5));if(m<0)m+=1440;return Math.round(m/60*100)/100};
 async function kirim(){const al=+$('#t_al').value,ha=$('#t_ha').value;
  if(!al)return toast('Pilih alat dulu');if(ha==='')return toast('Isi luas yang dikerjakan');
  if(!FS.length&&!confirm('Belum ada foto. Kirim tanpa foto?'))return;
  const d={jadwal_id:PRE.jadwal_id||null,tgl:$('#t_tgl').value,alsintan_id:al,lahan_id:+$('#t_lh').value||null,jam_mulai:$('#t_m').value||null,jam_selesai:$('#t_s').value||null,jam_kerja:jam($('#t_m').value,$('#t_s').value),
   bbm_liter:$('#t_bbm').value===''?null:+$('#t_bbm').value,luas_ha:+ha,kondisi_alat:$('#t_kd').value,catatan:$('#t_ct').value||null,latitude:GEO?GEO[0]:null,longitude:GEO?GEO[1]:null};
- await qPut({id:uuid(),data:d,fotos:FS,at:Date.now()});FS=[];GEO=null;PRE={};toast('Tersimpan di HP. Dikirim otomatis saat ada sinyal.');tab='riw';draw();sync()}
+ await qPut({id:uuid(),data:d,fotos:FS,at:Date.now()});FS=[];GEO=null;GEO_ACC=null;PRE={};toast('Tersimpan di HP. Dikirim otomatis saat ada sinyal.');tab='riw';draw();sync()}
 
 // ---------- Jadwal & riwayat ----------
 function vJad(){$('#v').innerHTML=(CA.jd.map(j=>`<div class="card"><b>${E(nama(CA.al,j.alsintan_id,'nama'))}</b><div class="sub">${j.tgl} • ${E(nama(CA.lh,j.lahan_id,'nama_blok'))}${j.keperluan?' • '+E(j.keperluan):''}</div>
