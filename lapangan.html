@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="manifest-lapangan.json"><meta name="theme-color" content="#2f5d3a"><link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<title>Lapangan Brigade</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{--g:#2f5d3a;--g2:#e3ede2;--bg:#f1f4ef;--tx:#1c2b20;--mu:#5d6d61;--bd:#cfd9cd;--rd:#b3261e;--am:#9a6700}
+*{box-sizing:border-box}body{margin:0;font:16px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--tx);padding-bottom:80px}
+header{background:var(--g);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:5}
+header b{flex:1}header small{opacity:.85;font-size:12px}header button{background:none;border:0;color:#fff;font-size:14px;padding:6px}
+main{padding:14px;max-width:560px;margin:0 auto}
+.card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.sub{color:var(--mu);font-size:13px;margin:2px 0 6px}
+label{display:block;font-size:13px;color:var(--mu);margin:12px 0 4px}
+input,select,textarea{width:100%;padding:12px;border:1px solid var(--bd);border-radius:10px;font:inherit;background:#fff}
+textarea{min-height:80px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button.b{border:1px solid var(--g);background:#fff;color:var(--g);border-radius:10px;padding:12px 16px;font:inherit;font-size:15px}
+button.p{background:var(--g);color:#fff;width:100%;margin-top:16px;padding:15px;font-size:17px}button.d{border-color:var(--rd);color:var(--rd)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.st{font-size:12px;border-radius:6px;padding:2px 8px;background:var(--g2);color:var(--g)}.st.Menunggu,.st.q{background:#fff1cc;color:var(--am)}.st.Ditolak{background:#fde3e1;color:var(--rd)}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--bd);display:flex;z-index:5}
+nav button{flex:1;border:0;background:none;padding:12px 4px;font:inherit;font-size:13px;color:var(--mu)}nav .on{color:var(--g);font-weight:700}
+.ph{display:flex;gap:8px;overflow-x:auto;margin-top:8px}.ph img{height:70px;border-radius:8px}
+#toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;display:none;z-index:99;max-width:90%}#toast.on{display:block}
+.login{max-width:360px;margin:12vh auto;padding:0 18px}.login h1{font-size:22px;margin:0 0 4px}
+</style></head><body>
+<div id="app"></div><div id="toast"></div>
+<script>
+const SB_URL='https://qkrfmutumnwkatxhgain.supabase.co',SB_KEY='sb_publishable_iEyp8OIb60YsUR9dChawIQ_Hl3B8LoZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js');
+sb.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY')setTimeout(()=>{const p=prompt('Masukkan kata sandi baru (minimal 8 karakter):');if(p&&p.length>=8)sb.auth.updateUser({password:p}).then(r=>toast(r.error?'Gagal: '+r.error.message:'Kata sandi berhasil diganti'));else toast('Kata sandi minimal 8 karakter')},400)});
+function lupa(){const e=($('#em').value||'').trim().toLowerCase();if(!e)return toast('Isi email dulu');sb.auth.resetPasswordForEmail(e,{redirectTo:location.origin+location.pathname}).then(r=>toast(r.error?'Gagal: '+r.error.message:'Tautan reset dikirim ke email Anda'))}
+const $=s=>document.querySelector(s),today=()=>new Date().toISOString().slice(0,10),n=v=>Number(v||0).toLocaleString('id-ID');
+const E=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LS=k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},SS=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const uuid=()=>([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
+let CA={al:[],lh:[],jd:[],lp:[],nm:''},tab='baru',FS=[],GEO=null,PRE={},UID=null,syncing=false;
+const toast=m=>{const t=$('#toast');t.textContent=m;t.className='on';setTimeout(()=>t.className='',3200)};
+const nama=(a,id,f)=>{const r=a.find(x=>x.id==id);return r?r[f]:'-'};
+
+// ---------- Antrean offline (IndexedDB) ----------
+const DB=new Promise((ok,no)=>{const r=indexedDB.open('lapangan',1);r.onupgradeneeded=()=>r.result.createObjectStore('q',{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const tx=async(m,f)=>{const d=await DB;return new Promise((ok,no)=>{const t=d.transaction('q',m),r=f(t.objectStore('q'));t.oncomplete=()=>ok(r.result);t.onerror=()=>no(t.error)})};
+const qAll=()=>tx('readonly',s=>s.getAll()),qPut=o=>tx('readwrite',s=>s.put(o)),qDel=id=>tx('readwrite',s=>s.delete(id));
+const comp=f=>new Promise(res=>{const i=new Image();i.onload=()=>{const k=Math.min(1,1280/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*k;c.height=i.height*k;c.getContext('2d').drawImage(i,0,0,c.width,c.height);c.toBlob(res,'image/jpeg',.72)};i.src=URL.createObjectURL(f)});
+
+async function sync(){
+ if(syncing||!navigator.onLine)return;syncing=true;
+ try{const s=(await sb.auth.getSession()).data.session;if(!s)return;
+  for(const it of await qAll()){
+   try{const paths=[];
+    for(let i=0;i<it.fotos.length;i++){const p=`lapangan/${s.user.id}/${it.id}_${i}.jpg`,{error}=await sb.storage.from('foto-brigade').upload(p,it.fotos[i],{contentType:'image/jpeg'});
+     if(error&&!/exist|duplicate/i.test(error.message))throw error;paths.push(p)}
+    const{error}=await sb.from('laporan_alsintan').upsert({...it.data,client_uuid:it.id,operator_id:s.user.id,foto_urls:paths},{onConflict:'client_uuid',ignoreDuplicates:true});
+    if(error)throw error;await qDel(it.id)
+   }catch(e){it.err=String(e.message||e);await qPut(it)}}
+  await muat(s.user.id)}
+ catch(e){}finally{syncing=false;badge();if(tab==='riw')draw()}}
+async function badge(){const c=(await qAll()).length;$('#bd')&&($('#bd').textContent=(navigator.onLine?'● online':'○ offline')+(c?` • ${c} belum terkirim`:''))}
+
+// ---------- Data referensi (disimpan agar bisa dipakai offline) ----------
+async function muat(u){
+ if(navigator.onLine)try{
+  const[a,l,j,r,p]=await Promise.all([sb.from('alsintan').select('id,nama,kode').eq('aktif',true).order('nama'),sb.from('lahan').select('id,nama_blok,luas_ha').eq('aktif',true).order('nama_blok'),
+   sb.from('jadwal_alsintan').select('*').eq('operator_id',u).in('status',['Dijadwalkan','Berjalan']).order('tgl'),
+   sb.from('laporan_alsintan').select('id,tgl,alsintan_id,luas_ha,status_verifikasi,catatan_verifikasi').eq('operator_id',u).order('tgl',{ascending:false}).limit(30),
+   sb.from('profiles').select('nama').eq('id',u).single()]);
+  if(a.error)throw a.error;CA={al:a.data||[],lh:l.data||[],jd:j.data||[],lp:r.data||[],nm:(p.data||{}).nama||''};SS('ca',CA);SS('uid',u)
+ }catch(e){CA=LS('ca')||CA}else CA=LS('ca')||CA}
+
+// ---------- Login ----------
+function loginView(){$('#app').innerHTML=`<div class="login"><h1>Lapangan Brigade</h1><div class="sub">Masuk dengan akun operator</div>
+<label>Email</label><input id="em" type="email" autocapitalize="none" autocorrect="off"><label>Kata sandi</label><input id="pw" type="password">
+<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" style="width:auto" onchange="$('#pw').type=this.checked?'text':'password'"> Tampilkan kata sandi</label>
+<button class="b p" onclick="login()">Masuk</button><button class="b" style="width:100%;margin-top:10px" onclick="lupa()">Lupa kata sandi?</button></div>`}
+async function login(){const{error}=await sb.auth.signInWithPassword({email:$('#em').value.trim().toLowerCase(),password:$('#pw').value.trim()});if(error)return toast('Gagal masuk: '+error.message);start()}
+async function logout(){const c=(await qAll()).length;if(c&&!confirm(c+' laporan belum terkirim. Tetap keluar? Laporan tetap tersimpan di HP dan terkirim setelah Anda masuk lagi.'))return;await sb.auth.signOut();UID=null;loginView()}
+async function start(){let s=null;try{s=(await sb.auth.getSession()).data.session}catch(e){}
+ UID=s?s.user.id:(!navigator.onLine?LS('uid'):null);if(!UID)return loginView();
+ await muat(UID);$('#app').innerHTML=`<header><b>${E(CA.nm||'Operator')}<br><small id="bd"></small></b><button onclick="sync().then(()=>toast('Sinkron selesai'))">⟳ Kirim</button><button onclick="logout()">Keluar</button></header><main id="v"></main>
+ <nav><button id="n_baru" onclick="go('baru')">📝<br>Laporan</button><button id="n_jad" onclick="go('jad')">📅<br>Jadwal</button><button id="n_riw" onclick="go('riw')">📋<br>Riwayat</button></nav>`;
+ draw();badge();sync()}
+function go(t){tab=t;draw()}
+function draw(){['baru','jad','riw'].forEach(k=>$('#n_'+k)&&($('#n_'+k).className=k===tab?'on':''));({baru:vBaru,jad:vJad,riw:vRiw})[tab]();badge()}
+
+// ---------- Form laporan ----------
+function vBaru(){const P=PRE;
+ $('#v').innerHTML=`<div class="card"><b>Laporan kerja alat</b><div class="sub">Tetap bisa diisi tanpa sinyal. Laporan terkirim otomatis saat ada koneksi.</div>
+ <label>Tanggal</label><input id="t_tgl" type="date" value="${P.tgl||today()}">
+ <label>Alsintan</label><select id="t_al"><option value="">- pilih alat -</option>${CA.al.map(a=>`<option value="${a.id}" ${a.id==P.alsintan_id?'selected':''}>${E(a.nama)}</option>`).join('')}</select>
+ <label>Lahan / blok</label><select id="t_lh"><option value="">-</option>${CA.lh.map(a=>`<option value="${a.id}" ${a.id==P.lahan_id?'selected':''}>${E(a.nama_blok)} (${a.luas_ha} Ha)</option>`).join('')}</select>
+ <div class="two"><div><label>Jam mulai</label><input id="t_m" type="time"></div><div><label>Jam selesai</label><input id="t_s" type="time"></div></div>
+ <div class="two"><div><label>Luas dikerjakan (Ha)</label><input id="t_ha" type="number" inputmode="decimal" step="any"></div><div><label>BBM terpakai (liter)</label><input id="t_bbm" type="number" inputmode="decimal" step="any"></div></div>
+ <label>Kondisi alat</label><select id="t_kd"><option>Baik</option><option>Perlu Servis Ringan</option><option>Rusak</option></select>
+ <label>Catatan</label><textarea id="t_ct" placeholder="Kendala, kejadian, dll."></textarea>
+ <label>Foto kerja / kondisi alat</label><input type="file" accept="image/*" multiple onchange="pick(this.files)"><div class="ph" id="t_ph"></div>
+ <div class="row"><button class="b" onclick="gps()" id="t_gps">📍 Ambil lokasi</button></div>
+ <button class="b p" onclick="kirim()">Simpan & Kirim Laporan</button></div>`;fotoView()}
+async function pick(fs){for(const f of fs)FS.push(await comp(f));fotoView()}
+function fotoView(){const e=$('#t_ph');if(e)e.innerHTML=FS.map(b=>`<img src="${URL.createObjectURL(b)}">`).join('')}
+function gps(){const ok=()=>$('#t_gps').textContent='📍 Lokasi tersimpan ✓',
+ man=()=>{const t=prompt('Tempel koordinat dari Google Maps (tekan lama di peta lalu salin angkanya). Contoh: -5.1234, 105.4567');if(!t)return;const m=t.match(/(-?\d+\.\d+)\s*[, ]\s*(-?\d+\.\d+)/);if(!m)return toast('Format koordinat tidak dikenali');GEO=[+m[1],+m[2]];ok()};
+ if(!window.isSecureContext||!navigator.geolocation){toast('Lokasi otomatis butuh aplikasi di alamat https. Isi koordinat manual dulu.');return man()}
+ navigator.geolocation.getCurrentPosition(p=>{GEO=[p.coords.latitude,p.coords.longitude];ok()},e=>{toast(e.code==1?'Izin lokasi ditolak untuk situs ini.':'Lokasi belum didapat, coba di tempat terbuka.');if(confirm('Isi koordinat manual?'))man()},{enableHighAccuracy:true,timeout:15000})}
+const jam=(a,b)=>{if(!a||!b)return null;let m=(+b.slice(0,2)*60+ +b.slice(3,5))-(+a.slice(0,2)*60+ +a.slice(3,5));if(m<0)m+=1440;return Math.round(m/60*100)/100};
+async function kirim(){const al=+$('#t_al').value,ha=$('#t_ha').value;
+ if(!al)return toast('Pilih alat dulu');if(ha==='')return toast('Isi luas yang dikerjakan');
+ if(!FS.length&&!confirm('Belum ada foto. Kirim tanpa foto?'))return;
+ const d={jadwal_id:PRE.jadwal_id||null,tgl:$('#t_tgl').value,alsintan_id:al,lahan_id:+$('#t_lh').value||null,jam_mulai:$('#t_m').value||null,jam_selesai:$('#t_s').value||null,jam_kerja:jam($('#t_m').value,$('#t_s').value),
+  bbm_liter:$('#t_bbm').value===''?null:+$('#t_bbm').value,luas_ha:+ha,kondisi_alat:$('#t_kd').value,catatan:$('#t_ct').value||null,latitude:GEO?GEO[0]:null,longitude:GEO?GEO[1]:null};
+ await qPut({id:uuid(),data:d,fotos:FS,at:Date.now()});FS=[];GEO=null;PRE={};toast('Tersimpan di HP. Dikirim otomatis saat ada sinyal.');tab='riw';draw();sync()}
+
+// ---------- Jadwal & riwayat ----------
+function vJad(){$('#v').innerHTML=(CA.jd.map(j=>`<div class="card"><b>${E(nama(CA.al,j.alsintan_id,'nama'))}</b><div class="sub">${j.tgl} • ${E(nama(CA.lh,j.lahan_id,'nama_blok'))}${j.keperluan?' • '+E(j.keperluan):''}</div>
+ <button class="b" onclick="PRE={jadwal_id:${j.id},alsintan_id:${j.alsintan_id},lahan_id:${j.lahan_id||0},tgl:'${j.tgl}'};go('baru')">Buat laporan untuk tugas ini</button></div>`).join('')||'<div class="sub">Belum ada tugas terjadwal untuk Anda.</div>')}
+async function vRiw(){const q=await qAll();
+ $('#v').innerHTML=(q.length?'<b>Belum terkirim</b><div style="height:8px"></div>':'')+q.map(it=>`<div class="card"><span class="st q">Belum terkirim</span> <b>${E(nama(CA.al,it.data.alsintan_id,'nama'))}</b><div class="sub">${it.data.tgl} • ${n(it.data.luas_ha)} Ha • ${it.fotos.length} foto</div>${it.err?`<div class="sub" style="color:var(--rd)">${E(it.err)}</div>`:''}
+  <div class="row"><button class="b" onclick="sync()">Kirim sekarang</button><button class="b d" onclick="hapusQ('${it.id}')">Hapus</button></div></div>`).join('')+
+ '<b>Sudah terkirim</b><div style="height:8px"></div>'+(CA.lp.map(r=>`<div class="card"><b>${E(nama(CA.al,r.alsintan_id,'nama'))}</b> <span class="st ${r.status_verifikasi}">${r.status_verifikasi}</span><div class="sub">${r.tgl} • ${n(r.luas_ha)} Ha</div>${r.catatan_verifikasi?`<div class="sub">Catatan kantor: ${E(r.catatan_verifikasi)}</div>`:''}</div>`).join('')||'<div class="sub">Belum ada laporan terkirim.</div>')}
+async function hapusQ(id){if(confirm('Hapus laporan yang belum terkirim ini?')){await qDel(id);draw()}}
+window.addEventListener('online',()=>{badge();sync()});window.addEventListener('offline',badge);setInterval(sync,60000);
+start();
+</script></body></html>
